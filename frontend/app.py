@@ -3,7 +3,7 @@ import requests
 
 API = "http://127.0.0.1:8000"
 
-st.title("Marketplace App")
+st.title("RTU Marketplace App")
 
 choice = st.selectbox("Action", ["Register", "Login"])
 

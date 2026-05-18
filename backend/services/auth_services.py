@@ -34,7 +34,8 @@ def login_user(db, username, password):
     ).first()
 
     if user:
-        return {"status": "success", "user": user.username}
+        return {"status": "success", 
+                "message": "Login successful",
+                "user": user.username}
 
-    return {"status": "error"}
-            
+    return {"status": "error", "message": "Invalid username or password"}

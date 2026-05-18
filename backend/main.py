@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
 from backend.database import engine, Base, get_db
 from backend import models   
 from backend.schemas import UserRegister, UserLogin
-from backend.services.auth_service import register_user, login_user
+from backend.services.auth_services import register_user, login_user
 
 app = FastAPI()
 
@@ -12,10 +13,10 @@ def startup():
 
 
 @app.post("/register")
-def register(user: UserRegister):
+def register(user: UserRegister, db: Session = Depends(get_db)):
     return register_user(db, user.username, user.email, user.password)
 
 
 @app.post("/login")
-def login(user: UserLogin):
+def login(user: UserLogin, db: Session = Depends(get_db)):
     return login_user(db, user.username, user.password)
