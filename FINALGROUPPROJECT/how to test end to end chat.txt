@@ -1,0 +1,16 @@
+Step 1: Open 2 google.com tabs and go to console (F12)
+Step 2: On first tab, copy this: 
+
+TAB 1
+const ws1 = new WebSocket("ws://127.0.0.1:8000/ws/chat/User1");
+ws1.onmessage = (event) => console.log("Incoming Message:", event.data);
+
+TAB 2
+const ws2 = new WebSocket("ws://127.0.0.1:8000/ws/chat/User2");
+ws2.onmessage = (event) => console.log("Incoming Message:", event.data);
+
+Step 3: Paste this on the console of Tab 1:
+
+ws1.send(JSON.stringify({ receiver_id: "User2", message: "Hey, can you see this?" }));
+
+---- then check Tab 2
