@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FastAPI Chat Test</title>
+</head>
+<body>
+    <h2>FastAPI WebSocket Chat Test</h2>
+
+    <label>Your User ID: </label>
+    <input type="text" id="userId" value="User1">
+    <button onclick="connectChat()">Connect</button>
+    <br><br>
+
+    <label>Send To (Receiver ID): </label>
+    <input type="text" id="receiverId" value="User2">
+    <br>
+    <label>Message: </label>
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+
+    <h3>Chat Log:</h3>
+    <div id="messages" style="border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll;"></div>
+
+    <script>
+        let ws;
+
+        function connectChat() {
+            const userId = document.getElementById("userId").value;
+            ws = new WebSocket(`ws://127.0.0.1:8000/ws/chat/${userId}`);
+
+            ws.onmessage = function(event) {
+                const messagesDiv = document.getElementById("messages");
+                messagesDiv.innerHTML += `<p>${event.data}</p>`;
+            };
+
+            alert(`Connected as ${userId}`);
+        }
+
+        function sendMessage() {
+            const receiverId = document.getElementById("receiverId").value;
+            const msg = document.getElementById("messageInput").value;
+
+            const payload = {
+                receiver_id: receiverId,
+                message: msg
+            };
+
+            ws.send(JSON.stringify(payload));
+            document.getElementById("messageInput").value = '';
+        }
+    </script>
+</body>
+</html>
