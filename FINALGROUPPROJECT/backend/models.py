@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from datetime import datetime
 from backend.database import Base
 
 
@@ -23,9 +24,31 @@ class Product(Base):
     product_name = Column(String)
 
     size = Column(String)
+
     price = Column(String)
+
     description = Column(String)
 
     owner_username = Column(String)
 
     images = Column(String)
+
+  
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    product_id = Column(Integer, ForeignKey("products.id"))
+
+    product_name = Column(String)
+
+    buyer_username = Column(String)
+    seller_username = Column(String)
+    price = Column(Integer)
+
+   
+    created_at = Column(DateTime, default=datetime.utcnow)

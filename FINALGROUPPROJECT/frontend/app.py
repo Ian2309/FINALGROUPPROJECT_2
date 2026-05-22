@@ -1,22 +1,26 @@
+#app.py
 import streamlit as st
 import requests
+import os
+import uuid
 
 API = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="RTU Marketplace", layout="wide")
 
-# -------------------------
+# =========================
 # SESSION STATE
-# -------------------------
+# =========================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# -------------------------
-# LOGIN / REGISTER PAGE
-# -------------------------
+
+# =========================
+# AUTH PAGE
+# =========================
 if not st.session_state.logged_in:
 
     st.title("RTU Marketplace")
@@ -32,361 +36,267 @@ if not st.session_state.logged_in:
 
         if st.button("Register"):
 
-            res = requests.post(
-                f"{API}/register",
-                json={
-                    "username": username,
-                    "email": email,
-                    "password": password
-                }
-            )
+            res = requests.post(f"{API}/register", json={
+                "username": username,
+                "email": email,
+                "password": password
+            })
 
-            st.json(res.json())
+            data = res.json()
+
+            if data["status"] == "success":
+                st.session_state.logged_in = True
+                st.session_state.user = data["user"]
+                st.rerun()
+            else:
+                st.error(data["message"])
 
     # LOGIN
-    elif choice == "Login":
+    else:
 
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
 
         if st.button("Login"):
 
-            res = requests.post(
-                f"{API}/login",
-                json={
-                    "username": username,
-                    "password": password
-                }
-            )
+            res = requests.post(f"{API}/login", json={
+                "username": username,
+                "password": password
+            })
 
             data = res.json()
 
             if data["status"] == "success":
-
                 st.session_state.logged_in = True
                 st.session_state.user = data["user"]
-
                 st.rerun()
-
             else:
                 st.error(data["message"])
 
-# -------------------------
+
+# =========================
 # DASHBOARD
-# -------------------------
-# -------------------------
-# DASHBOARD
-# -------------------------
-# SELLING
-# -------------------------
-# DASHBOARD
-# -------------------------
+# =========================
 else:
 
     st.sidebar.title("RTU Marketplace")
 
     menu = st.sidebar.radio(
         "Navigation",
-        ["Home", "Profile", "Selling", "Chat", "Logout"]
+        ["Home", "Profile", "Selling", "Buying", "Chat", "Logout"]
     )
 
     username = st.session_state.user["username"]
 
-    # ---------------- HOME ----------------
+
+    # =========================
+    # HOME
+    # =========================
     if menu == "Home":
 
-        st.title(f"Welcome, {username}!")
-        st.subheader("Latest Posts")
+        st.title(f"Welcome, {username}")
+        st.subheader("Latest Products")
 
         res = requests.get(f"{API}/products")
 
         if res.status_code == 200:
 
-            products = res.json()
+            products = res.json()[::-1]
 
-            for p in products[::-1]:
+            for p in products:
 
                 st.subheader(p["product_type"])
-
                 st.write("Seller:", p["owner_username"])
                 st.write("Price:", p["price"])
                 st.write("Description:", p["description"])
 
+                # images
                 if p.get("images"):
-
-                    image_list = p["images"].split(",")
-
-                    for img in image_list:
+                    for img in p["images"].split(","):
                         st.image(f"uploads/{img}", width=200)
+
+                # BUY LOGIC
+                is_owner = p["owner_username"] == username
+
+                if is_owner:
+                    st.info("This is your product")
+                else:
+                    if st.button("Buy", key=f"buy_{p['id']}"):
+
+                        buy_res = requests.post(f"{API}/buy-product", json={
+                            "product_id": p["id"]
+                        })
+
+                        if buy_res.status_code == 200:
+                            st.success("Purchased successfully!")
+                        else:
+                            try:
+                                st.error(buy_res.json().get("message"))
+                            except:
+                                st.error("Purchase failed")
 
                 st.divider()
 
-    # ---------------- PROFILE ----------------
+
+    # =========================
+    # PROFILE
+    # =========================
     elif menu == "Profile":
 
-        st.title("Profile")
+        st.title("Profile Center")
 
-        st.write("Username:", username)
-        st.write("Email:", st.session_state.user["email"])
+        tab1, tab2, tab3 = st.tabs([
+            "My Listings",
+            "My Purchases",
+            "My Sales"
+        ])
 
-    # ---------------- SELLING ----------------
+        # LISTINGS
+        with tab1:
+            st.subheader("My Products")
+
+            res = requests.get(f"{API}/my-products/{username}")
+
+            if res.status_code == 200:
+                for p in res.json():
+
+                    st.write("🛒", p["product_type"])
+                    st.write("Price:", p["price"])
+
+                    if p.get("images"):
+                        for img in p["images"].split(","):
+                            st.image(f"uploads/{img}", width=120)
+
+                    st.divider()
+
+        # PURCHASES
+        with tab2:
+            st.subheader("Bought Items")
+
+            res = requests.get(f"{API}/my-transactions/{username}")
+
+            if res.status_code == 200:
+                for t in res.json():
+
+                    if t["buyer_username"] == username:
+                        st.success("Purchased")
+                        st.write("Product:", t["product_name"])
+                        st.write("Seller:", t["seller_username"])
+                        st.write("Price:", t["price"])
+
+                        st.button(f"Chat Seller {t['id']}", key=f"cb_{t['id']}")
+
+                    st.divider()
+
+        # SALES
+        with tab3:
+            st.subheader("Sold Items")
+
+            res = requests.get(f"{API}/my-transactions/{username}")
+
+            if res.status_code == 200:
+                for t in res.json():
+
+                    if t["seller_username"] == username:
+                        st.warning("Sold")
+                        st.write("Product:", t["product_name"])
+                        st.write("Buyer:", t["buyer_username"])
+                        st.write("Price:", t["price"])
+
+                        st.button(f"Chat Buyer {t['id']}", key=f"cs_{t['id']}")
+
+                    st.divider()
+
+
+    # =========================
+    # SELLING
+    # =========================
     elif menu == "Selling":
 
         st.title("Selling Panel")
 
         product_type = st.selectbox(
             "Product Type",
-            ["Select...", "Uniform", "Books", "Others"]
+            ["Uniform", "Books", "Others"]
         )
 
-        # ---------- UNIFORM ----------
-        if product_type == "Uniform":
+        description = st.text_area("Description")
 
-            uniform_type = st.selectbox(
-                "Type of Uniform",
-                ["University Uniform", "PE", "NSTP"]
-            )
+        price = st.number_input("Price (₱)", min_value=0.0)
 
-            size = st.selectbox(
-                "Size",
-                ["XS", "S", "M", "L", "XL", "2XL", "3XL"]
-            )
+        uploaded_files = st.file_uploader(
+            "Images",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True
+        )
 
-            price = st.number_input(
-                "Price (₱)",
-                min_value=0.0,
-                format="%.2f"
-            )
+        def save_images(files):
+            os.makedirs("uploads", exist_ok=True)
+            names = []
 
-            description = st.text_area("Description")
+            for f in files:
+                name = f"{uuid.uuid4()}_{f.name}"
+                path = f"uploads/{name}"
+                with open(path, "wb") as file:
+                    file.write(f.getbuffer())
+                names.append(name)
 
-            uploaded_files = st.file_uploader(
-                "Upload Product Images",
-                type=["png", "jpg", "jpeg"],
-                accept_multiple_files=True,
-                key="uniform_images"
-            )
+            return ",".join(names)
 
-            if st.button("Post Uniform"):
+        if st.button("Post Product"):
 
-                import os
+            images = save_images(uploaded_files) if uploaded_files else ""
 
-                os.makedirs("uploads", exist_ok=True)
+            res = requests.post(f"{API}/add-product", json={
+                "product_type": product_type,
+                "description": description,
+                "price": price,
+                "owner_username": username,
+                "images": images
+            })
 
-                image_names = []
+            if res.status_code == 200:
+                st.success("Posted successfully!")
+            else:
+                st.error(res.text)
 
-                if uploaded_files:
 
-                    for file in uploaded_files:
-
-                        file_path = f"uploads/{file.name}"
-
-                        with open(file_path, "wb") as f:
-                            f.write(file.getbuffer())
-
-                        image_names.append(file.name)
-
-                res = requests.post(
-                    f"{API}/add-product",
-                    json={
-                        "product_type": "Uniform",
-                        "uniform_type": uniform_type,
-                        "size": size,
-                        "price": str(price),
-                        "description": description,
-                        "owner_username": username,
-                        "images": ",".join(image_names)
-                    }
-                )
-
-                if res.status_code == 200:
-                    st.success("Uniform posted!")
-                else:
-                    st.error(res.text)
-
-        # ---------- BOOKS ----------
-        elif product_type == "Books":
-
-            book_title = st.text_input("Book Title")
-
-            price = st.number_input(
-                "Price (₱)",
-                min_value=0.0,
-                format="%.2f"
-            )
-
-            description = st.text_area("Description")
-
-            uploaded_files = st.file_uploader(
-                "Upload Product Images",
-                type=["png", "jpg", "jpeg"],
-                accept_multiple_files=True,
-                key="book_images"
-            )
-
-            if st.button("Post Book"):
-
-                import os
-
-                os.makedirs("uploads", exist_ok=True)
-
-                image_names = []
-
-                if uploaded_files:
-
-                    for file in uploaded_files:
-
-                        file_path = f"uploads/{file.name}"
-
-                        with open(file_path, "wb") as f:
-                            f.write(file.getbuffer())
-
-                        image_names.append(file.name)
-
-                res = requests.post(
-                    f"{API}/add-product",
-                    json={
-                        "product_type": "Books",
-                        "book_title": book_title,
-                        "size": "",
-                        "price": str(price),
-                        "description": description,
-                        "owner_username": username,
-                        "images": ",".join(image_names)
-                    }
-                )
-
-                if res.status_code == 200:
-                    st.success("Book posted!")
-                else:
-                    st.error(res.text)
-
-        # ---------- OTHERS ----------
-        elif product_type == "Others":
-
-            product_name = st.text_input("Name of Product")
-
-            price = st.number_input(
-                "Price (₱)",
-                min_value=0.0,
-                format="%.2f"
-            )
-
-            description = st.text_area("Description")
-
-            uploaded_files = st.file_uploader(
-                "Upload Product Images",
-                type=["png", "jpg", "jpeg"],
-                accept_multiple_files=True,
-                key="others_images"
-            )
-
-            if st.button("Post Product"):
-
-                import os
-
-                os.makedirs("uploads", exist_ok=True)
-
-                image_names = []
-
-                if uploaded_files:
-
-                    for file in uploaded_files:
-
-                        file_path = f"uploads/{file.name}"
-
-                        with open(file_path, "wb") as f:
-                            f.write(file.getbuffer())
-
-                        image_names.append(file.name)
-
-                res = requests.post(
-                    f"{API}/add-product",
-                    json={
-                        "product_type": "Others",
-                        "product_name": product_name,
-                        "size": "",
-                        "price": str(price),
-                        "description": description,
-                        "owner_username": username,
-                        "images": ",".join(image_names)
-                    }
-                )
-
-                if res.status_code == 200:
-                    st.success("Product posted!")
-                else:
-                    st.error(res.text)
-
-        # ---------- MY PRODUCTS ----------
-        st.subheader("My Products")
-
-        res = requests.get(f"{API}/my-products/{username}")
-
-        if res.status_code == 200:
-
-            products = res.json()
-
-            for p in products:
-
-                st.write("Type:", p["product_type"])
-
-                if p.get("uniform_type"):
-                    st.write("Uniform Type:", p["uniform_type"])
-
-                if p.get("book_title"):
-                    st.write("Book Title:", p["book_title"])
-
-                if p.get("product_name"):
-                    st.write("Product Name:", p["product_name"])
-
-                if p.get("size"):
-                    st.write("Size:", p["size"])
-
-                st.write("Price:", p["price"])
-                st.write("Description:", p["description"])
-
-                if p.get("images"):
-
-                    image_list = p["images"].split(",")
-
-                    for img in image_list:
-                        st.image(f"uploads/{img}", width=150)
-
-                st.divider()
-
-    # ---------------- BUYING ----------------
+    # =========================
+    # BUYING
+    # =========================
     elif menu == "Buying":
 
-        st.title("All Products")
+        st.title("Browse Products")
 
         res = requests.get(f"{API}/products")
 
         if res.status_code == 200:
 
-            products = res.json()
-
-            for p in products:
+            for p in res.json():
 
                 st.subheader(p["product_type"])
-
                 st.write("Seller:", p["owner_username"])
                 st.write("Price:", p["price"])
-                st.write("Description:", p["description"])
 
                 if p.get("images"):
-
-                    image_list = p["images"].split(",")
-
-                    for img in image_list:
+                    for img in p["images"].split(","):
                         st.image(f"uploads/{img}", width=200)
 
                 st.divider()
 
-    # ---------------- LOGOUT ----------------
-    elif menu == "Logout":
 
+    # =========================
+    # CHAT
+    # =========================
+    elif menu == "Chat":
+        st.title("Chat System")
+        st.info("Chat system coming soon...")
+
+
+    # =========================
+    # LOGOUT
+    # =========================
+    elif menu == "Logout":
         st.session_state.logged_in = False
         st.session_state.user = None
-
         st.rerun()

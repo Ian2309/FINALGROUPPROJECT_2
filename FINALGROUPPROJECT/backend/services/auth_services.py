@@ -3,6 +3,7 @@ from backend.models import User
 
 # REg
 def register_user(db, username, email, password):
+
     existing_user = db.query(User).filter(User.username == username).first()
 
     if existing_user:
@@ -19,10 +20,15 @@ def register_user(db, username, email, password):
 
     db.add(new_user)
     db.commit()
+    db.refresh(new_user)
 
     return {
         "status": "success",
-        "message": "Registered successfully"
+        "message": "Registered successfully",
+        "user": {
+            "username": new_user.username,
+            "email": new_user.email
+        }
     }
 
 

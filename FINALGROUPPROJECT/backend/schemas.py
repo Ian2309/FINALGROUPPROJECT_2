@@ -23,9 +23,15 @@ class ProductCreate(BaseModel):
     product_name: Optional[str] = None
 
     size: Optional[str] = None
-    price: str
+    price: int
     description: str
 
     owner_username: str
 
     images: Optional[str] = ""
+
+
+# ---------------- BUY PRODUCT ----------------
+class BuyProduct(BaseModel):
+    product_id: int
+    buyer_username: str
