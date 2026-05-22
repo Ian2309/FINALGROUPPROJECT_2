@@ -28,14 +28,23 @@ def register_user(db, username, email, password):
 
 # LOGin
 def login_user(db, username, password):
+
     user = db.query(User).filter(
         User.username == username,
         User.password == password
     ).first()
 
     if user:
-        return {"status": "success", 
-                "message": "Login successful",
-                "user": user.username}
+        return {
+            "status": "success",
+            "message": "Login successful",
+            "user": {
+                "username": user.username,
+                "email": user.email
+            }
+        }
 
-    return {"status": "error", "message": "Invalid username or password"}
+    return {
+        "status": "error",
+        "message": "Invalid username or password"
+    }
