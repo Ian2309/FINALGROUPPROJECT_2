@@ -1,3 +1,4 @@
+#models.py
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from datetime import datetime
 from backend.database import Base
@@ -18,24 +19,18 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     product_type = Column(String)
-
     uniform_type = Column(String)
     book_title = Column(String)
     product_name = Column(String)
-
     size = Column(String)
-
     price = Column(String)
-
     description = Column(String)
-
     owner_username = Column(String)
-
     images = Column(String)
 
-  
-    created_at = Column(DateTime, default=datetime.utcnow)
+    is_sold = Column(String, default="No")
 
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Transaction(Base):
     __tablename__ = "transactions"

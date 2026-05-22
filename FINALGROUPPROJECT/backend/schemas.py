@@ -1,3 +1,4 @@
+#schemas.py
 from pydantic import BaseModel
 from typing import Optional
 
@@ -21,13 +22,10 @@ class ProductCreate(BaseModel):
     uniform_type: Optional[str] = None
     book_title: Optional[str] = None
     product_name: Optional[str] = None
-
     size: Optional[str] = None
     price: int
     description: str
-
     owner_username: str
-
     images: Optional[str] = ""
 
 

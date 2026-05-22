@@ -1,3 +1,4 @@
+#main.py
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -14,7 +15,8 @@ app = FastAPI()
 # CHAT ROUTER
 app.include_router(chat.router)
 
-# CREATE TABLES
+
+# ---------------- CREATE TABLES ----------------
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
@@ -77,31 +79,44 @@ def buy_product(data: BuyProduct, db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == data.product_id).first()
 
     if not product:
-        return {"status": "error", "message": "Product not found"}
+        return {
+            "status": "error",
+            "message": "Product not found"
+        }
 
-    # TEMP FIX: buyer comes from frontend
-    buyer_username = data.buyer_username
-
-    # BLOCK SELF PURCHASE
-    if product.owner_username == buyer_username:
+    # prevent self purchase
+    if product.owner_username.lower() == data.buyer_username.lower():
         return {
             "status": "error",
             "message": "You cannot buy your own product"
         }
 
+    # prevent sold items
+    if product.is_sold == "Yes":
+        return {
+            "status": "error",
+            "message": "Product already sold"
+        }
+
     transaction = Transaction(
         product_id=product.id,
-        product_name=product.product_name or product.book_title or "Unnamed Product",
-        buyer_username=buyer_username,
+        product_name=product.product_name or product.book_title or product.product_type,
+        buyer_username=data.buyer_username,
         seller_username=product.owner_username,
         price=int(product.price)
     )
 
     db.add(transaction)
-    db.commit()
-    db.refresh(transaction)
 
-    return {"status": "success"}
+    # MARK PRODUCT SOLD
+    product.is_sold = "Yes"
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Product purchased"
+    }
 
 
 # ---------------- MY TRANSACTIONS ----------------
