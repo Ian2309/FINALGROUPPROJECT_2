@@ -1,6 +1,8 @@
-uvicorn
-fastapi
 streamlit
 requests
+fastapi
+uvicorn
 sqlalchemy
 websocket-client
+python-multipart
+pydantic
