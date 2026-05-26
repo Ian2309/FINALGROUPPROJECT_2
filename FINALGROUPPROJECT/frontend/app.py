@@ -24,6 +24,9 @@ if "logged_in" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
+if "logout_confirm" not in st.session_state:
+    st.session_state.logout_confirm = False
+
 
 # ==========================================
 # SAVE IMAGES FUNCTION
@@ -138,8 +141,41 @@ else:
 
     menu = st.sidebar.radio(
         "Navigation",
-        ["Home", "Profile", "Selling", "Buying", "Chat", "Logout"]
+        ["Home", "Profile", "Selling", "Buying", "Chat"]
     )
+    
+    st.sidebar.divider()
+    
+    # ==========================================
+    # LOGOUT INTERACTION LAYER (WITH CONFIRMATION)
+    # ==========================================
+    if not st.session_state.logout_confirm:
+        if st.sidebar.button("🔓 Log Out", use_container_width=True):
+            st.session_state.logout_confirm = True
+            st.rerun()
+    else:
+        st.sidebar.warning("Are you sure you want to log out?")
+        col_yes, col_no = st.sidebar.columns(2)
+        
+        with col_yes:
+            if st.button("Yes", type="primary", use_container_width=True):
+                username_to_logout = st.session_state.user["username"]
+                try:
+                    # Notify backend framework
+                    requests.post(f"{API}/logout?username={username_to_logout}")
+                except Exception:
+                    pass
+
+                # Reset authorization footprints
+                st.session_state.logged_in = False
+                st.session_state.user = None
+                st.session_state.logout_confirm = False
+                st.rerun()
+                
+        with col_no:
+            if st.button("No", use_container_width=True):
+                st.session_state.logout_confirm = False
+                st.rerun()
 
     username = st.session_state.user["username"]
 
@@ -362,7 +398,7 @@ else:
 
                     col1, col2, col3, col4, col5, col6 = st.columns(
                         [2, 2, 2, 2, 1, 1]
-                )
+                    )
 
                     with col1:
                         st.write("📦", t["product_name"])
@@ -380,7 +416,7 @@ else:
                         st.write("₱", t["price"])
 
                     with col5:
-                        if st.button("💬", key=f"seller_chat_{t['id']}"):
+                        if st.button("💬", key=f"buyer_chat_{t['id']}"):
 
                             res = requests.post(
                                 f"{API}/chat/open",
@@ -388,8 +424,8 @@ else:
                                     "buyer": t["buyer_username"],
                                     "seller": t["seller_username"],
                                     "product_id": t["product_id"]
-                            }
-                    )
+                                }
+                            )
 
                             data = res.json()
 
@@ -401,7 +437,7 @@ else:
                             st.rerun()
                     with col6:
                         try:
-                            if st.button("❌", key=f"cancel_{t['id']}"):
+                            if st.button("❌", key=f"cancel_buyer_{t['id']}"):
                                 cancel_order(t["id"])
                                 st.rerun()
                         except Exception as e:
@@ -463,7 +499,6 @@ else:
                                 }
                             )
     
-
                             data = res.json()
 
                             st.session_state.active_chat = {
@@ -475,7 +510,7 @@ else:
 
                     with col6:
                         try:
-                            if st.button("❌", key=f"cancel_{t['id']}"):
+                            if st.button("❌", key=f"cancel_seller_{t['id']}"):
                                 cancel_order(t["id"])
                                 st.rerun()
                         except Exception as e:
@@ -710,13 +745,3 @@ else:
     # ==========================================
     elif menu == "Chat":
         chat_panel()
-
-    # ==========================================
-    # LOGOUT
-    # ==========================================
-    elif menu == "Logout":
-
-        st.session_state.logged_in = False
-        st.session_state.user = None
-
-        st.rerun()
