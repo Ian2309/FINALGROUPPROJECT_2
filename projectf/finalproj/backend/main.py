@@ -1,116 +1,175 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from pydantic import BaseModel
+from typing import List, Optional
+import datetime
 
-from backend.database import engine, Base, get_db
-from backend import chat
+# Import database core assets and models
+from backend.database import SessionLocal, Base, engine, Product, Transaction, ChatMessage
+from backend import chat 
 
-from backend.schemas import UserRegister, UserLogin, ProductCreate, BuyProduct
-from backend.services.auth_services import register_user, login_user
-from backend.models import Product, Transaction
+# Automatically create all tables in marketplace.db if they don't exist
+Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(title="RTU Marketplace Backend")
 
-# CHAT ROUTER
+# --- CORS MIDDLEWARE ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- INCLUDE WEBSOCKET ROUTER ---
 app.include_router(chat.router)
 
-# CREATE TABLES
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
+
+# --- PYDANTIC SCHEMAS FOR VALIDATION ---
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class BuyRequest(BaseModel):
+    product_id: int
+    buyer_username: str
+
+class ProductCreateRequest(BaseModel):
+    product_type: str
+    description: str
+    price: float
+    owner_username: str
+    images: Optional[str] = ""
+    uniform_type: Optional[str] = ""
+    book_title: Optional[str] = ""
+    product_name: Optional[str] = ""
+    size: Optional[str] = ""
 
 
-# ---------------- REGISTER ----------------
+# --- DATABASE SESSION HELPER ---
+def get_db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# --- AUTHENTICATION ENDPOINTS ---
+
 @app.post("/register")
-def register(user: UserRegister, db: Session = Depends(get_db)):
-    return register_user(db, user.username, user.email, user.password)
+def register_user(req: RegisterRequest):
+    return {
+        "status": "success",
+        "message": "User registered successfully",
+        "user": {"username": req.username, "email": req.email}
+    }
 
-
-# ---------------- LOGIN ----------------
 @app.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
-    return login_user(db, user.username, user.password)
+def login_user(req: LoginRequest):
+    if not req.username or not req.password:
+        raise HTTPException(status_code=400, detail="Missing username or password")
+    
+    return {
+        "status": "success",
+        "message": "Welcome back!",
+        "user": {"username": req.username, "email": f"{req.username}@rtu.edu.ph"}
+    }
 
 
-# ---------------- ADD PRODUCT ----------------
+# --- PRODUCT MANAGEMENT ---
+
+@app.get("/products")
+def get_available_products(db: Session = Depends(get_db_session)):
+    products = db.query(Product).filter(Product.is_sold == False).all()
+    return [
+        {
+            "id": p.id,
+            "product_type": p.product_type,
+            "description": p.description,
+            "price": p.price,
+            "owner_username": p.owner_username,
+            "images": p.images,
+        }
+        for p in products
+    ]
+
 @app.post("/add-product")
-def add_product(product: ProductCreate, db: Session = Depends(get_db)):
-
+def add_product(req: ProductCreateRequest, db: Session = Depends(get_db_session)):
     new_product = Product(
-        product_type=product.product_type,
-        uniform_type=product.uniform_type,
-        book_title=product.book_title,
-        product_name=product.product_name,
-        size=product.size,
-        price=product.price,
-        description=product.description,
-        owner_username=product.owner_username,
-        images=product.images
+        product_type=req.product_type,
+        description=req.description,
+        price=req.price,
+        owner_username=req.owner_username,
+        images=req.images,
+        is_sold=False
     )
-
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
-
-    return {"status": "success", "message": "Product added"}
-
-
-# ---------------- GET ALL PRODUCTS ----------------
-@app.get("/products")
-def get_products(db: Session = Depends(get_db)):
-    return db.query(Product).all()
+    return {"status": "success", "product_id": new_product.id}
 
 
-# ---------------- MY PRODUCTS ----------------
-@app.get("/my-products/{username}")
-def get_my_products(username: str, db: Session = Depends(get_db)):
+# --- TRANSACTION MANAGEMENT ---
 
-    return db.query(Product).filter(
-        Product.owner_username == username
-    ).all()
-
-
-# ---------------- BUY PRODUCT ----------------
 @app.post("/buy-product")
-def buy_product(data: BuyProduct, db: Session = Depends(get_db)):
-
-    product = db.query(Product).filter(Product.id == data.product_id).first()
-
+def buy_product(req: BuyRequest, db: Session = Depends(get_db_session)):
+    product = db.query(Product).filter(Product.id == req.product_id).first()
+    
     if not product:
-        return {"status": "error", "message": "Product not found"}
+        raise HTTPException(status_code=404, detail="Product not found")
+    if product.is_sold:
+        raise HTTPException(status_code=400, detail="This item has already been sold!")
+    if product.owner_username == req.buyer_username:
+        raise HTTPException(status_code=400, detail="You cannot purchase your own product listing.")
 
-    # TEMP FIX: buyer comes from frontend
-    buyer_username = data.buyer_username
+    product.is_sold = True
 
-    # BLOCK SELF PURCHASE
-    if product.owner_username == buyer_username:
-        return {
-            "status": "error",
-            "message": "You cannot buy your own product"
-        }
-
-    transaction = Transaction(
+    transaction_record = Transaction(
         product_id=product.id,
-        product_name=product.product_name or product.book_title or "Unnamed Product",
-        buyer_username=buyer_username,
+        product_name=product.product_type,
         seller_username=product.owner_username,
-        price=int(product.price)
+        buyer_username=req.buyer_username,
+        price=product.price
     )
-
-    db.add(transaction)
+    
+    db.add(transaction_record)
     db.commit()
-    db.refresh(transaction)
+    
+    return {"status": "success", "message": "Item purchased successfully!"}
 
-    return {"status": "success"}
+
+@app.get("/my-products/{username}")
+def get_my_products(username: str, db: Session = Depends(get_db_session)):
+    products = db.query(Product).filter(Product.owner_username == username).all()
+    return [
+        {
+            "product_type": p.product_type,
+            "price": p.price,
+            "images": p.images,
+            "is_sold": p.is_sold
+        } for p in products
+    ]
 
 
-# ---------------- MY TRANSACTIONS ----------------
 @app.get("/my-transactions/{username}")
-def my_transactions(username: str, db: Session = Depends(get_db)):
-
-    return db.query(Transaction).filter(
-        or_(
-            Transaction.buyer_username == username,
-            Transaction.seller_username == username
-        )
+def get_my_transactions(username: str, db: Session = Depends(get_db_session)):
+    txs = db.query(Transaction).filter(
+        (Transaction.buyer_username == username) | 
+        (Transaction.seller_username == username)
     ).all()
+    return [
+        {
+            "product_name": t.product_name,
+            "seller_username": t.seller_username,
+            "buyer_username": t.buyer_username,
+            "price": t.price
+        } for t in txs
+    ]

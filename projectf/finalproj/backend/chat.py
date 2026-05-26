@@ -1,6 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 from typing import Dict
+from backend.database import SessionLocal, ChatMessage
 
 router = APIRouter(prefix="/ws/chat")
 
@@ -11,6 +12,26 @@ class ConnectionManager:
     async def connect(self, username: str, websocket: WebSocket):
         await websocket.accept()
         self.active_connections[username] = websocket
+        
+        # Load historical logs from the database upon establishing connection
+        db = SessionLocal()
+        try:
+            history = db.query(ChatMessage).filter(
+                (ChatMessage.receiver == None) | 
+                (ChatMessage.sender == username) | 
+                (ChatMessage.receiver == username)
+            ).order_by(ChatMessage.timestamp.asc()).all()
+            
+            for msg in history:
+                if not msg.receiver:
+                    await websocket.send_text(f"💬 {msg.sender}: {msg.message}")
+                else:
+                    if msg.sender == username:
+                        await websocket.send_text(f"🔒 [Private to {msg.receiver}]: {msg.message}")
+                    else:
+                        await websocket.send_text(f"🔒 [Private] {msg.sender}: {msg.message}")
+        finally:
+            db.close()
 
     def disconnect(self, username: str):
         if username in self.active_connections:
@@ -22,7 +43,7 @@ class ConnectionManager:
             await websocket.send_text(f"🔒 [Private] {sender}: {message}")
         else:
             if sender in self.active_connections:
-                await self.active_connections[sender].send_text(f"⚠️ System: {receiver} is offline.")
+                await self.active_connections[sender].send_text(f"⚠️ System: {receiver} is offline. Message saved to inbox.")
 
     async def broadcast(self, message: str):
         for connection in self.active_connections.values():
@@ -36,6 +57,7 @@ manager = ConnectionManager()
 @router.websocket("/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await manager.connect(user_id, websocket)
+    db = SessionLocal()
     try:
         while True:
             data = await websocket.receive_text()
@@ -47,12 +69,20 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             if not message_text:
                 continue
 
-            if receiver_id:
-                await manager.send_private_message(message_text, sender=user_id, receiver=receiver_id)
-                await websocket.send_text(f"🔒 [Private to {receiver_id}]: {message_text}")
+            target_receiver = receiver_id if receiver_id else None
+
+            new_msg = ChatMessage(sender=user_id, receiver=target_receiver, message=message_text)
+            db.add(new_msg)
+            db.commit()
+
+            if target_receiver:
+                await manager.send_private_message(message_text, sender=user_id, receiver=target_receiver)
+                await websocket.send_text(f"🔒 [Private to {target_receiver}]: {message_text}")
             else:
                 await manager.broadcast(f"💬 {user_id}: {message_text}")
                 break 
 
     except WebSocketDisconnect:
         manager.disconnect(user_id)
+    finally:
+        db.close()

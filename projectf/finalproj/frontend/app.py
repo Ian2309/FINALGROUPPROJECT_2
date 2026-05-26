@@ -9,41 +9,25 @@ API = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="RTU Marketplace", layout="wide")
 
-# --- 1. INTIALIZE CORE APP SESSION STATES ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
     st.session_state.user = None
-
-# Chat logs collection state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-
-# --- 2. LIGHTWEIGHT WEBSOCKET SEND FUNCTION ---
-def send_chat_message(username, receiver_id, message_text):
-    """Opens a short-lived synchronous websocket connection to deliver the text payload"""
+def send_silent_intro(username, receiver_id, message_text):
+    """Fires a one-off socket context hit from the Browse section click events"""
     try:
         ws_url = f"ws://127.0.0.1:8000/ws/chat/{username}"
-        ws = websocket.create_connection(ws_url, timeout=3)
-        
-        payload = {
-            "receiver_id": receiver_id if receiver_id else None,
-            "message": message_text
-        }
+        ws = websocket.create_connection(ws_url, timeout=2)
+        payload = {"receiver_id": receiver_id, "message": message_text}
         ws.send(json.dumps(payload))
-        
-        # Immediately capture the echoed response from the server backend
-        response = ws.recv()
-        if response:
-            st.session_state.messages.append(response)
-            
         ws.close()
     except Exception as e:
-        st.error(f"Chat delivery failed: {e}")
+        pass
 
-
-# --- 3. AUTHENTICATION SCREENS ---
+# --- AUTH SELECTION WINDOW ---
 if not st.session_state.logged_in:
     st.title("RTU Marketplace")
     choice = st.selectbox("Action", ["Login", "Register"])
@@ -54,203 +38,188 @@ if not st.session_state.logged_in:
         password = st.text_input("Password", type="password")
 
         if st.button("Register"):
-            res = requests.post(f"{API}/register", json={
-                "username": username,
-                "email": email,
-                "password": password
-            })
+            res = requests.post(f"{API}/register", json={"username": username, "email": email, "password": password})
             data = res.json()
-            if data["status"] == "success":
+            if data.get("status") == "success":
                 st.session_state.logged_in = True
                 st.session_state.user = data["user"]
                 st.rerun()
             else:
-                st.error(data["message"])
+                st.error("Registration failed.")
     else:
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
 
         if st.button("Login"):
-            res = requests.post(f"{API}/login", json={
-                "username": username,
-                "password": password
-            })
-            data = res.json()
-            if data["status"] == "success":
+            res = requests.post(f"{API}/login", json={"username": username, "password": password})
+            if res.status_code == 200:
+                data = res.json()
                 st.session_state.logged_in = True
                 st.session_state.user = data["user"]
                 st.rerun()
             else:
-                st.error(data["message"])
+                st.error("Invalid credentials.")
 
-
-# --- 4. MAIN DASHBOARD PANELS ---
+# --- ROUTED MAIN CONTEXT PANELS ---
 else:
     st.sidebar.title("RTU Marketplace")
-    menu = st.sidebar.radio(
-        "Navigation",
-        ["Home", "Profile", "Selling", "Buying", "Chat", "Logout"]
-    )
-
+    menu = st.sidebar.radio("Navigation", ["Home", "Profile", "Selling", "Buying", "Chat", "Logout"])
     username = st.session_state.user["username"]
 
-    # --- TAB: HOME ---
+    # --- TAB: HOME FEED ---
     if menu == "Home":
-        st.title(f"Welcome, {username}")
-        st.subheader("Latest Products")
+        st.title(f"Welcome, {username} 👋")
+        st.subheader("Recent Feed Listings")
         res = requests.get(f"{API}/products")
-
         if res.status_code == 200:
-            products = res.json()[::-1]
-            for p in products:
-                st.subheader(p["product_type"])
-                st.write("Seller:", p["owner_username"])
-                st.write("Price:", p["price"])
-                st.write("Description:", p["description"])
-
-                if p.get("images"):
-                    for img in p["images"].split(","):
-                        st.image(f"uploads/{img}", width=200)
-
-                is_owner = p["owner_username"] == username
-                if is_owner:
-                    st.info("This is your product")
-                else:
-                    if st.button("Buy", key=f"buy_{p['id']}"):
-                        buy_res = requests.post(f"{API}/buy-product", json={
-                            "product_id": p["id"],
-                            "buyer_username": username
-                        })
-                        if buy_res.status_code == 200:
-                            st.success("Purchased successfully!")
-                        else:
-                            try:
-                                st.error(buy_res.json().get("message"))
-                            except:
-                                st.error("Purchase failed")
+            for p in res.json()[::-1]:
+                st.markdown(f"### {p['product_type']}")
+                st.write(f"Owner: `{p['owner_username']}` | Price: **₱{p['price']}**")
+                st.write(p["description"])
                 st.divider()
 
-    # --- TAB: PROFILE ---
+    # --- TAB: PROFILE STATS ---
     elif menu == "Profile":
-        st.title("Profile Center")
-        tab1, tab2, tab3 = st.tabs(["My Listings", "My Purchases", "My Sales"])
-
-        with tab1:
-            st.subheader("My Products")
+        st.title("User Profile Dashboard")
+        t1, t2, t3 = st.tabs(["Active Listings", "Purchased Ledger", "Sales Revenue"])
+        
+        with t1:
             res = requests.get(f"{API}/my-products/{username}")
             if res.status_code == 200:
                 for p in res.json():
-                    st.write("🛒", p["product_type"])
-                    st.write("Price:", p["price"])
-                    if p.get("images"):
-                        for img in p["images"].split(","):
-                            st.image(f"uploads/{img}", width=120)
-                    st.divider()
-
-        with tab2:
-            st.subheader("Bought Items")
+                    status_lbl = "🔴 Sold" if p["is_sold"] else "🟢 Active"
+                    st.write(f"**{p['product_type']}** - ₱{p['price']} ({status_lbl})")
+        with t2:
             res = requests.get(f"{API}/my-transactions/{username}")
             if res.status_code == 200:
                 for t in res.json():
                     if t["buyer_username"] == username:
-                        st.success("Purchased")
-                        st.write("Product:", t["product_name"])
-                        st.write("Seller:", t["seller_username"])
-                        st.write("Price:", t["price"])
-                        st.divider()
-
-        with tab3:
-            st.subheader("Sold Items")
+                        st.write(f"Bought **{t['product_name']}** from `{t['seller_username']}` for ₱{t['price']}")
+        with t3:
             res = requests.get(f"{API}/my-transactions/{username}")
             if res.status_code == 200:
                 for t in res.json():
                     if t["seller_username"] == username:
-                        st.warning("Sold")
-                        st.write("Product:", t["product_name"])
-                        st.write("Buyer:", t["buyer_username"])
-                        st.write("Price:", t["price"])
-                        st.divider()
+                        st.write(f"Sold **{t['product_name']}** to `{t['buyer_username']}` for ₱{t['price']}")
 
-    # --- TAB: SELLING ---
+    # --- TAB: SELLING POST ---
     elif menu == "Selling":
-        st.title("Selling Panel")
+        st.title("Post a New Listing")
         product_type = st.selectbox("Product Type", ["Uniform", "Books", "Others"])
         description = st.text_area("Description")
         price = st.number_input("Price (₱)", min_value=0.0)
-        uploaded_files = st.file_uploader("Images", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-
-        def save_images(files):
-            os.makedirs("uploads", exist_ok=True)
-            names = []
-            for f in files:
-                name = f"{uuid.uuid4()}_{f.name}"
-                path = f"uploads/{name}"
-                with open(path, "wb") as file:
-                    file.write(f.getbuffer())
-                names.append(name)
-            return ",".join(names)
+        uploaded_files = st.file_uploader("Upload Images", accept_multiple_files=True)
 
         if st.button("Post Product"):
-            images = save_images(uploaded_files) if uploaded_files else ""
             res = requests.post(f"{API}/add-product", json={
                 "product_type": product_type,
                 "description": description,
                 "price": price,
                 "owner_username": username,
-                "images": images,
-                "uniform_type": "",
-                "book_title": "",
-                "product_name": product_type,
-                "size": ""
+                "images": ""
             })
             if res.status_code == 200:
-                st.success("Posted successfully!")
-            else:
-                st.error(res.text)
+                st.success("Listing published successfully!")
+                st.rerun()
 
-    # --- TAB: BUYING ---
+    # --- TAB: MARKETPLACE SELECTION ---
     elif menu == "Buying":
-        st.title("Browse Products")
+        st.title("🛍️ Browse Marketplace Products")
         res = requests.get(f"{API}/products")
         if res.status_code == 200:
-            for p in res.json():
-                st.subheader(p["product_type"])
-                st.write("Seller:", p["owner_username"])
-                st.write("Price:", p["price"])
-                if p.get("images"):
-                    for img in p["images"].split(","):
-                        st.image(f"uploads/{img}", width=200)
+            products = res.json()
+            if not products:
+                st.info("No products currently available.")
+            for p in products:
+                c1, c2 = st.columns([2, 1], gap="medium")
+                with c1:
+                    st.subheader(f"🏷️ {p['product_type']}")
+                    st.write(f"**Seller:** `{p['owner_username']}` | **Price:** ₱{p['price']:.2f}")
+                    st.write(p["description"])
+                with c2:
+                    if p["owner_username"] == username:
+                        st.info("Your listing")
+                    else:
+                        if st.button("🛒 Buy Now", key=f"b_{p['id']}", use_container_width=True):
+                            br = requests.post(f"{API}/buy-product", json={"product_id": int(p["id"]), "buyer_username": username})
+                            if br.status_code == 200:
+                                st.success("Item purchased!")
+                                st.rerun()
+                        if st.button("💬 Chat Seller", key=f"c_{p['id']}", use_container_width=True):
+                            intro = f"Hi! I want to buy your '{p['product_type']}' for ₱{p['price']}."
+                            send_silent_intro(username, p['owner_username'], intro)
+                            st.info(f"Message sent! Go to the Chat panel to speak with {p['owner_username']}.")
                 st.divider()
 
-    # --- TAB: CHAT ROOM ---
+    # --- TAB: REAL-TIME WEBSOCKET CHAT ROOM ---
     elif menu == "Chat":
-        st.title("💬 RTU Marketplace Chat Room")
+        st.title("💬 Live Chat Room")
         st.caption(f"Logged in as: **{username}**")
-        st.markdown("---")
         
-        receiver_id = st.text_input("Recipient Username (Leave blank to broadcast):", placeholder="e.g., JaneDoe").strip()
+        receiver_id = st.text_input("Recipient Username (Leave blank to broadcast):").strip()
         
-        st.subheader("Chat Log")
-        chat_container = st.container(height=350, border=True)
+        # 1. Maintain or establish a single background connection block instance
+        ws_url = f"ws://127.0.0.1:8000/ws/chat/{username}"
+        if "ws_connection" not in st.session_state:
+            try:
+                st.session_state.ws_connection = websocket.create_connection(ws_url, timeout=1)
+                st.session_state.messages = []  # Fresh session reload context sync
+            except Exception as e:
+                st.error(f"Could not connect to live chat stream channel: {e}")
+
+        # 2. Continually read background buffer frames
+        if "ws_connection" in st.session_state and st.session_state.ws_connection:
+            try:
+                st.session_state.ws_connection.settimeout(0.1)
+                while True:
+                    new_incoming = st.session_state.ws_connection.recv()
+                    if new_incoming and new_incoming not in st.session_state.messages:
+                        st.session_state.messages.append(new_incoming)
+            except websocket.WebSocketTimeoutException:
+                pass
+            except Exception:
+                st.session_state.ws_connection = None
+
+        # 3. Print out complete conversation logs inside frame
+        chat_container = st.container(height=320, border=True)
         with chat_container:
             if not st.session_state.messages:
-                st.info("No active messages in your history loop yet.")
+                st.info("No active chat messages here yet.")
             for msg in st.session_state.messages:
                 st.write(msg)
                 
-        # Chat Input Form Layout
-        with st.form("send_msg_form", clear_on_submit=True):
-            input_message = st.text_input("Type message here...", placeholder="Is this available?")
-            send_click = st.form_submit_button("Send Message")
-            
-            if send_click and input_message:
-                # Delivers package securely via state-safe transmission pipeline
-                send_chat_message(username, receiver_id, input_message)
-                st.rerun()
+        # 4. Input forms send down to the persistent background loop
+        with st.form("chat_form", clear_on_submit=True):
+            txt = st.text_input("Type message...")
+            if st.form_submit_button("Send Message") and txt:
+                if "ws_connection" in st.session_state and st.session_state.ws_connection:
+                    try:
+                        payload = {
+                            "receiver_id": receiver_id if receiver_id else None,
+                            "message": txt
+                        }
+                        st.session_state.ws_connection.send(json.dumps(payload))
+                        
+                        # Add message directly to local session display
+                        lbl = f"🔒 [Private to {receiver_id}]: {txt}" if receiver_id else f"💬 {username}: {txt}"
+                        st.session_state.messages.append(lbl)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Message dropped: {e}")
+                else:
+                    st.error("Socket error. Reconnecting...")
+                    st.session_state.pop("ws_connection", None)
+                    st.rerun()
 
-    # --- TAB: LOGOUT ---
+    # --- TAB: LOGOUT CLEANUP ---
     elif menu == "Logout":
+        if "ws_connection" in st.session_state and st.session_state.ws_connection:
+            try:
+                st.session_state.ws_connection.close()
+            except:
+                pass
         st.session_state.logged_in = False
         st.session_state.user = None
         st.session_state.messages = []
+        st.session_state.pop("ws_connection", None)
         st.rerun()
