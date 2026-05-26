@@ -6,7 +6,7 @@ import uuid
 from profile_components import user_header
 from chat_panel import chat_panel
 from cancel_panel import cancel_order
-from ws_client import start_ws   
+
 
 API = "http://127.0.0.1:8000"
 
@@ -121,7 +121,7 @@ if not st.session_state.logged_in:
 
             data = res.json()
 
-            if data["status"] == "success":
+            if data.get("status") == "success":
 
                 st.session_state.logged_in = True
                 st.session_state.user = data["user"]

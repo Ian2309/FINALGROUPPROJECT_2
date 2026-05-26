@@ -8,16 +8,22 @@ API = "http://127.0.0.1:8000"
 def cancel_order(transaction_id):
 
     try:
-        res = requests.post(
-            f"{API}/cancel-order/{transaction_id}"
-        )
+        res = requests.post(f"{API}/cancel-order/{transaction_id}")
 
-        data = res.json()
+        if res.status_code != 200:
+            st.error(f"HTTP ERROR: {res.text}")
+            return
 
-        if data["status"] == "success":
+        try:
+            data = res.json()
+        except:
+            st.error("Invalid JSON response from server")
+            return
+
+        if data.get("status") == "success":
             st.success("Order cancelled")
         else:
-            st.error(data["message"])
+            st.error(data.get("message", "Unknown error"))
 
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"Request failed: {e}")

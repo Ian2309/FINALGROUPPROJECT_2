@@ -1,3 +1,4 @@
+# backend/main.py
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -5,12 +6,15 @@ from typing import List
 
 # Import components exactly as you named them
 from backend.database import SessionLocal, engine
-from backend.models import Base, Product, Transaction
+from backend.models import Base, Product, Transaction, User
 from backend.schemas import UserRegister, UserLogin, ProductCreate, BuyProduct
 
 # Import sub-routers and your auth service layer
 from backend import chat_routes, cancel_routes
 from backend.auth import register_user, login_user
+
+from backend.chat_ws import router as ws_router
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -25,8 +29,10 @@ app.add_middleware(
 )
 
 # Attach modular sub-routers
+
 app.include_router(chat_routes.router, prefix="/chat", tags=["Chat"])
 app.include_router(cancel_routes.router, prefix="/action", tags=["Management"])
+app.include_router(ws_router)
 
 def get_db():
     db = SessionLocal()
@@ -51,6 +57,23 @@ def login(req: UserLogin):
         raise HTTPException(status_code=401, detail=result["message"])
     return result
 
+@app.get("/user/{username}")
+def get_user(username: str, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(
+        User.username == username
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    return {
+        "username": user.username,
+        "email": user.email
+    }
 
 # --- NEW: LOGOUT VALIDATION ENDPOINT ---
 @app.post("/logout")
@@ -151,14 +174,16 @@ def get_my_transactions(username: str, db: Session = Depends(get_db)):
         (Transaction.buyer_username == username) | 
         (Transaction.seller_username == username)
     ).all()
+
     return [
-        {
-            "id": t.id,
-            "product_name": t.product_name,
-            "seller_username": t.seller_username,
-            "buyer_username": t.buyer_username,
-            "price": t.price,
-            "status": t.status,
-            "created_at": t.created_at
-        } for t in txs
-    ]
+    {
+        "id": t.id,
+        "product_id": t.product_id,
+        "product_name": t.product_name,
+        "seller_username": t.seller_username,
+        "buyer_username": t.buyer_username,
+        "price": t.price,
+        "status": t.status,
+        "created_at": t.created_at
+    } for t in txs
+]

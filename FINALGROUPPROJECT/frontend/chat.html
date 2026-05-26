@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RTU Chat</title>
+  <style>
+    body { font-family: Arial; }
+    #chat { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+  </style>
+</head>
+<body>
+
+<h2>Realtime Chat</h2>
+
+<input id="conversation_id" placeholder="Conversation ID">
+<input id="username" placeholder="Username">
+<input id="message" placeholder="Message">
+
+<button onclick="connect()">Connect</button>
+<button onclick="sendMessage()">Send</button>
+
+<div id="chat"></div>
+
+<script>
+let ws;
+
+function connect() {
+    let convo = document.getElementById("conversation_id").value;
+
+    ws = new WebSocket("ws://172.31.200.1:8000/chat/ws/" + convo);
+
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+
+        let chat = document.getElementById("chat");
+        let msg = document.createElement("div");
+
+        msg.innerText = data.sender + ": " + data.message;
+        chat.appendChild(msg);
+    };
+}
+
+function sendMessage() {
+    let message = document.getElementById("message").value;
+    let username = document.getElementById("username").value;
+
+    ws.send(JSON.stringify({
+        sender: username,
+        message: message
+    }));
+}
+</script>
+
+</body>
+</html>

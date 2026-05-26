@@ -13,7 +13,7 @@ router = APIRouter()
 # =========================
 # OPEN / CREATE CONVERSATION
 # =========================
-@router.post("/chat/open")
+@router.post("/open")
 def open_chat(payload: dict, db: Session = Depends(get_db)):
 
     convo = db.query(Conversation).filter(
@@ -30,11 +30,13 @@ def open_chat(payload: dict, db: Session = Depends(get_db)):
             seller_username=payload["seller"],
             product_id=payload["product_id"]
         )
+
         db.add(convo)
         db.commit()
         db.refresh(convo)
 
     return {
+        "status": "success",
         "conversation_id": convo.id
     }
 
@@ -120,7 +122,14 @@ def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
         Conversation.id == conversation_id
     ).first()
 
+    if not convo:
+        return {
+            "status": "error",
+            "message": "Conversation not found"
+        }
+
     return {
+        "status": "success",
         "buyer": convo.buyer_username,
         "seller": convo.seller_username,
         "product_id": convo.product_id
