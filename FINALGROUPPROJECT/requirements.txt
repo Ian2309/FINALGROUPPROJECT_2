@@ -1,2 +1,6 @@
 uvicorn
 fastapi
+streamlit
+requests
+sqlalchemy
+websocket-client
