@@ -4,16 +4,23 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from backend.database import engine, Base, get_db
-from backend import chat
 
 from backend.schemas import UserRegister, UserLogin, ProductCreate, BuyProduct
 from backend.services.auth_services import register_user, login_user
-from backend.models import Product, Transaction
+from backend.models import Product, Transaction, User
+
+from backend.chat_routes import router as chat_router
+
+from backend.chat_ws import router as ws_router
+
+from backend.cancel_routes import router as cancel_router
 
 app = FastAPI()
 
 # CHAT ROUTER
-app.include_router(chat.router)
+app.include_router(chat_router)
+app.include_router(ws_router)
+app.include_router(cancel_router)
 
 
 # ---------------- CREATE TABLES ----------------
@@ -129,3 +136,23 @@ def my_transactions(username: str, db: Session = Depends(get_db)):
             Transaction.seller_username == username
         )
     ).all()
+
+
+# ---------------- GET USER ----------------
+@app.get("/user/{username}")
+def get_user(username: str, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(
+        User.username == username
+    ).first()
+
+    if not user:
+        return {
+            "status": "error",
+            "message": "User not found"
+        }
+
+    return {
+        "username": user.username,
+        "email": user.email
+    }

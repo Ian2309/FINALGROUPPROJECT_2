@@ -27,9 +27,7 @@ class Product(Base):
     description = Column(String)
     owner_username = Column(String)
     images = Column(String)
-
     is_sold = Column(String, default="No")
-
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Transaction(Base):
@@ -38,12 +36,31 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     product_id = Column(Integer, ForeignKey("products.id"))
-
     product_name = Column(String)
-
     buyer_username = Column(String)
     seller_username = Column(String)
     price = Column(Integer)
+    status = Column(String, default="Completed")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-   
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    buyer_username = Column(String)
+    seller_username = Column(String)
+    product_id = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    conversation_id = Column(Integer)
+    sender_username = Column(String)
+    content = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)

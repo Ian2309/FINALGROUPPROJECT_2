@@ -3,10 +3,6 @@ import streamlit as st
 import requests
 import os
 import uuid
-from profile_components import user_header
-from chat_panel import chat_panel
-from cancel_panel import cancel_order
-from ws_client import start_ws   
 
 API = "http://127.0.0.1:8000"
 
@@ -37,6 +33,7 @@ def save_images(files):
     for f in files:
 
         filename = f"{uuid.uuid4()}_{f.name}"
+
         path = f"uploads/{filename}"
 
         with open(path, "wb") as file:
@@ -100,7 +97,6 @@ if not st.session_state.logged_in:
     else:
 
         username = st.text_input("Username")
-
         password = st.text_input(
             "Password",
             type="password"
@@ -208,7 +204,6 @@ else:
                     for img in p["images"].split(","):
 
                         if img.strip():
-
                             st.image(
                                 f"uploads/{img}",
                                 width=200
@@ -261,10 +256,8 @@ else:
     # PROFILE
     # ==========================================
     elif menu == "Profile":
-        st.title("My Profile")
-        user_header(username)
 
-        st.divider()
+        st.title("Profile Center")
 
         tab1, tab2, tab3 = st.tabs([
             "My Listings",
@@ -285,12 +278,7 @@ else:
 
             if res.status_code == 200:
 
-                products = res.json()
-
-                if not products:
-                    st.info("No products yet.")
-
-                for p in products:
+                for p in res.json():
 
                     st.write("🛒", p["product_type"])
 
@@ -320,7 +308,7 @@ else:
                             p.get("product_name", "")
                         )
 
-                    st.write("Price: ₱", p["price"])
+                    st.write("Price:", p["price"])
 
                     if p.get("images"):
 
@@ -348,64 +336,42 @@ else:
 
             if res.status_code == 200:
 
-                transactions = res.json()
+                for t in res.json():
 
-                buyer_transactions = [
-                    t for t in transactions
-                    if t["buyer_username"] == username
-                ]
+                    if t["buyer_username"] == username:
 
-                if not buyer_transactions:
-                    st.info("No purchases yet.")
-
-                for t in buyer_transactions:
-
-                    col1, col2, col3, col4, col5, col6 = st.columns(
-                        [2, 2, 2, 2, 1, 1]
-                )
-
-                    with col1:
-                        st.write("📦", t["product_name"])
-
-                    with col2:
-                        st.write("Role: Buyer")
-
-                    with col3:
-                        st.write(
-                            "Seller:",
-                            t["seller_username"]
+                        col1, col2, col3, col4, col5 = st.columns(
+                            [2, 2, 2, 2, 1]
                         )
 
-                    with col4:
-                        st.write("₱", t["price"])
+                        with col1:
+                            st.write(
+                                "📦",
+                                t["product_name"]
+                            )
 
-                    with col5:
-                        if st.button("💬", key=f"seller_chat_{t['id']}"):
+                        with col2:
+                            st.write("Role: Buyer")
 
-                            res = requests.post(
-                                f"{API}/chat/open",
-                                json={
-                                    "buyer": t["buyer_username"],
-                                    "seller": t["seller_username"],
-                                    "product_id": t["product_id"]
-                            }
-                    )
+                        with col3:
+                            st.write(
+                                "Seller:",
+                                t["seller_username"]
+                            )
 
-                            data = res.json()
+                        with col4:
+                            st.write(
+                                "₱",
+                                t["price"]
+                            )
 
-                            st.session_state.active_chat = {
-                                "conversation_id": data["conversation_id"],
-                                "seller": t["seller_username"],
-                                "buyer": t["buyer_username"]
-                            }
-                            st.rerun()
-                    with col6:
-                        try:
-                            if st.button("❌", key=f"cancel_{t['id']}"):
-                                cancel_order(t["id"])
-                                st.rerun()
-                        except Exception as e:
-                            st.error(str(e))  
+                        with col5:
+                            st.button(
+                                "💬",
+                                key=f"buyer_chat_{t['id']}"
+                            )
+
+                        st.divider()
 
         # ==========================================
         # MY SALES
@@ -420,66 +386,42 @@ else:
 
             if res.status_code == 200:
 
-                transactions = res.json()
+                for t in res.json():
 
-                seller_transactions = [
-                    t for t in transactions
-                    if t["seller_username"] == username
-                ]
+                    if t["seller_username"] == username:
 
-                if not seller_transactions:
-                    st.info("No sales yet.")
-
-                for t in seller_transactions:
-
-                    col1, col2, col3, col4, col5, col6 = st.columns(
-                        [2, 2, 2, 2, 1, 1]
-                    )
-
-                    with col1:
-                        st.write("📦", t["product_name"])
-
-                    with col2:
-                        st.write("Role: Seller")
-
-                    with col3:
-                        st.write(
-                            "Buyer:",
-                            t["buyer_username"]
+                        col1, col2, col3, col4, col5 = st.columns(
+                            [2, 2, 2, 2, 1]
                         )
 
-                    with col4:
-                        st.write("₱", t["price"])
-
-                    with col5:
-                        if st.button("💬", key=f"seller_chat_{t['id']}"):
-
-                            res = requests.post(
-                                f"{API}/chat/open",
-                                json={
-                                    "buyer": t["buyer_username"],
-                                    "seller": t["seller_username"],
-                                    "product_id": t["product_id"]
-                                }
+                        with col1:
+                            st.write(
+                                "📦",
+                                t["product_name"]
                             )
-    
 
-                            data = res.json()
+                        with col2:
+                            st.write("Role: Seller")
 
-                            st.session_state.active_chat = {
-                                "conversation_id": data["conversation_id"],
-                                "seller": t["seller_username"],
-                                "buyer": t["buyer_username"]
-                            }
-                            st.rerun()
+                        with col3:
+                            st.write(
+                                "Buyer:",
+                                t["buyer_username"]
+                            )
 
-                    with col6:
-                        try:
-                            if st.button("❌", key=f"cancel_{t['id']}"):
-                                cancel_order(t["id"])
-                                st.rerun()
-                        except Exception as e:
-                            st.error(str(e))
+                        with col4:
+                            st.write(
+                                "₱",
+                                t["price"]
+                            )
+
+                        with col5:
+                            st.button(
+                                "💬",
+                                key=f"seller_chat_{t['id']}"
+                            )
+
+                        st.divider()
 
     # ==========================================
     # SELLING
@@ -709,7 +651,9 @@ else:
     # CHAT
     # ==========================================
     elif menu == "Chat":
-        chat_panel()
+
+        st.title("Chat System")
+        st.info("Chat system coming soon...")
 
     # ==========================================
     # LOGOUT
