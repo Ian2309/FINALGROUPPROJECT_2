@@ -95,7 +95,8 @@ if not st.session_state.logged_in:
                 st.rerun()
 
             else:
-                st.error(data["message"])
+                # INAYOS NA LINE 132: Gagamit ng .get() para ligtas sa KeyError
+                st.error(data.get("message", data.get("detail", "An unknown error occurred.")))
 
     # ==========================================
     # LOGIN
@@ -129,7 +130,8 @@ if not st.session_state.logged_in:
                 st.rerun()
 
             else:
-                st.error(data["message"])
+                # INAYOS NA LINE 155: Parehong pansangga sa KeyError para sa login error
+                st.error(data.get("message", data.get("detail", "An unknown error occurred.")))
 
 
 # ==========================================
